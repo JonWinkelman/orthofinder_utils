@@ -44,7 +44,7 @@ def run_all(path_to_results):
     copy_folders_from_orthoresults(path_to_results)
     os.chdir(path_to_app_folder)
     initial_check(path_to_results)
-    make_genome_annotation_files(path_to_results)
+    #make_genome_annotation_files(path_to_results)
     
 #
 # =============================================================================

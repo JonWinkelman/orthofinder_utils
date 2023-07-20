@@ -11,6 +11,7 @@ import pandas as pd
 from os.path import dirname
 import numpy as np
 from jw_utils import parse_gff as pgf
+from jw_utils import parse_fasta as pfa
 
 class DashOrthoParser():
     """
@@ -27,8 +28,7 @@ class DashOrthoParser():
         #self.path_to_data_folder = path_to_data_folder  # 
         self.path_to_data = path_to_data_folder
         self.path_to_orthogroups = os.path.join(self.path_to_data, 'Orthogroups/Orthogroups.tsv')                          
-        self.path_to_gene_counts = os.path.join(self.path_to_data,'Orthogroups/Orthogroups.GeneCount.tsv')       
-        
+        self.path_to_gene_counts = os.path.join(self.path_to_data,'Orthogroups/Orthogroups.GeneCount.tsv')        
         self.accession_to_name = self.accession_to_name()
         self.name_to_accession = self.name_to_accession()
         self.accessions = list(self.accession_to_name.keys())
@@ -86,17 +86,6 @@ class DashOrthoParser():
                 OG_HOG_dict[OG] = [HOG]
         return OG_HOG_dict
       
-    # def N_HOG_counts_check(self):
-    #     try:
-    #         df = pd.read_csv(self.path_to_HOG_counts)
-    #         #accessions = list(self.accession_to_name.keys())
-    #         diff = set(self.accessions).difference(set(df.columns[1:]))
-    #         if len(diff) >0:
-    #             raise Exception(f'The species in "{self.path_to_HOG_counts}" do not match the species in acccession to name dict')
-    #     except: 
-    #         df = self.make_HOG_counts()
-    #         df.to_csv(self.path_to_HOG_counts)
-    #     return df
     
     def make_HOG_counts(self):
         "Return a df containing, for each accession, the number of proteins in each HOG"
@@ -128,8 +117,7 @@ class DashOrthoParser():
     
     def accession_to_name(self):
         'return a dictionary with accessions as keys and names as values'
-                      
-        path_to_json = './data/summary_data/AssemblyAccession_to_SpeciesName.json'
+        path_to_json = os.path.join(self.path_to_data, 'summary_data/AssemblyAccession_to_SpeciesName.json')             
         with open(path_to_json) as f:
             return json.load(f)
     
@@ -163,6 +151,24 @@ class DashOrthoParser():
     
 
     
+    def HOG_protnames_in_genome(self, HOG,species_accession):
+        if isinstance(species_accession, str):
+            col_list = [species_accession]
+
+        else:
+            raise Exception(f'species_accession needs to be a string, but you entered a {type(species_accession)}' )
+            
+        col_list.append('HOG')
+        df=pd.read_csv(self.N_HOG_path, sep='\t', usecols=col_list, low_memory=False)
+        ser = df.set_index('HOG').loc[HOG, species_accession]
+        if isinstance(ser, str): 
+            prot_list = ser.split(', ')
+        else:
+            prot_list = []
+        return prot_list
+    
+    
+    
     def HOG_proteins_in_genome(self, HOG, species_accessions):
         """Return series with  numer of proteins in a given hog in each genome
         
@@ -178,50 +184,17 @@ class DashOrthoParser():
         else:
             col_list = list(species_accessions)
         col_list.append('HOG')
-        df=pd.read_csv(self.N_HOG_path, sep='\t', usecols=col_list)
-        series = df.set_index('HOG').loc[HOG, :].fillna('')
-        copies = {acc:len(series[acc].split(',')) for acc in series.index}
-
-        return pd.Series(copies)
-
-    
-    
-    def HOG_gene_dict(self, species_accession): 
-       #make df with orhtogroup and all genes in a given organism
-        df = pd.read_csv(self.N_HOG_path, sep = '\t', usecols = ["HOG", species_accession], low_memory=False)
-        df = df.astype(str)
-        df = df.set_index('HOG')
-        HOG_gene_dict = {}
-        for HOG in df.index:
-            HOG_gene_dict[HOG] = df.loc[HOG,species_accession].split(', ')
-        return HOG_gene_dict
- 
-
-
-    def gene_HOG_dict(self, species_accession):
-        gene_HOG_dict = {}
-        HOG_gene_dict = self.HOG_gene_dict(species_accession)
-        for HOG, proteins in HOG_gene_dict.items():
-            proteins =  HOG_gene_dict[HOG]
-            if proteins[0] != 'nan':
-                for protein in proteins:
-                    gene_HOG_dict[protein.strip()] = HOG
-        return gene_HOG_dict
-    
-    
-    
-    def gene_to_orthogroup_dict(self, species_accession):
-        'return a dictionary of all genes/proteins (key) to orthogroups (value)'
-        g2o_dict = {}
-        d = self.orthogroup_gene_dict(species_accession)
-        for orthogroup, protein_lst in d.items(): 
-            if len(protein_lst) >1:
-                for protein in protein_lst:
-                    protein = protein.strip()
-                    g2o_dict[protein]=orthogroup
+        df=pd.read_csv(self.N_HOG_path, sep='\t', usecols=col_list, low_memory=False)
+        series = df.set_index('HOG').loc[HOG, :]#.fillna('')
+        copies = {}
+        for acc in series.index:
+            if type(series[acc]) == str:
+                num_copies = len(series[acc].split(','))
+                copies[acc] = num_copies
             else:
-                g2o_dict[protein_lst[0].strip()]= orthogroup
-        return g2o_dict
+                copies[acc] = 0
+        
+        return pd.Series(copies) 
     
  
 
@@ -236,43 +209,6 @@ class DashOrthoParser():
         filt =  (df_grp >= copies)
         return ((filt.sum(axis=1)/len(group)*100)).to_dict()
     
-    
-    
-    # def get_HOG_saturation(self, group, copies):
-    #     """Return percentage of group (accessions) that have >= copies in orthogroup
-        
-    #     group (str): list of accessions to consider in analysis
-    #     copies (float): number of copies in HOG to consider
-
-    #     Return (dict): {HOG:percentage}  how many of genomes contain >= copies 
-    #                     (proteins) in each orthogroup. E.g. (HOG1:3.2) if copies = 2, would mean
-    #                     3.2% of the given accessions contain 2 or more proteins in HOG1.
-     
-    #      """
-    #     gene_counts_df = self.N_HOG_counts.set_index('HOG')
-    #     df_grp = gene_counts_df[group]
-    #     filt =  (df_grp >= copies)
-    #     return ((filt.sum(axis=1)/len(group)*100)).to_dict()
-    
- 
-
-    # def genomes_missing_HOGs(self,ing, outg, HOG, copies):
-    #     'get ingroup and outgroup genome accessions with below threshold paralogs in orthogroup'
-    #     gene_counts_df = self.N_HOG_counts.set_index('HOG')
-    #     df_ingrp = gene_counts_df.loc[HOG,ing]
-    #     df_outgrp = gene_counts_df.loc[HOG,outg]
-    #     if copies >= 2:
-    #         outgroup_copies = 2
-    #     else:
-    #         outgroup_copies = copies
-    #     filt_in =  (df_ingrp >= copies)
-    #     filt_out =  (df_outgrp >= outgroup_copies)
-    #     missing_dict = {}
-    #     missing_dict['ingroup'] = (list(df_ingrp[~filt_in].index))
-    #     missing_dict['outgroup'] = (list(df_outgrp[~filt_out].index))
-    #     return missing_dict
-        
-
         
     def og_enrichment(self, ingroup, outgroup, copies):
         'return % dif in presence of orthogroups in ingroup vs outgroup genomes'
@@ -351,20 +287,30 @@ class DashOrthoParser():
     
     #Need to fix the path to orthogroups_df
   
-    def N_HOGs_proteins(self, tax_level=None):
-        """return nested dict {accession:{HOG:proteins}}"""
+    def N_HOGs_proteins(self, tax_level=None, HOG_list=None, accession_list=None):
+        """return nested dict {accession:{HOG:proteins}}
+
+        Parameters:
+        HOG_list (list): List of HOGs to include, if Null, all HOGs are included
+        accession_list (list): List of accessions to include, if Null, all accessions are included
+        """
         if not tax_level:
             tax_level = self.HOG_node
         if not tax_level:
             tax_level = 'N0'
         path = os.path.join(self.HOG_dir_path, tax_level + '.tsv')
-        HOGs_df = pd.read_csv(path, sep = '\t')
+        HOGs_df = pd.read_csv(path, sep = '\t', low_memory=False)
         HOGs_df = HOGs_df.set_index('HOG')
-        HOG_proteins = {acc:{} for acc in self.accessions}
+        if HOG_list:
+            HOGs_df = HOGs_df.loc[HOG_list,:]
+        if accession_list:
+            HOGs_df = HOGs_df.loc[:,accession_list]
+        else: accession_list=self.accessions
+        HOG_proteins = {acc:{} for acc in accession_list}
 
-        for assembly_identifier in HOGs_df.columns[2:]: #for each accession column
-            filt = HOGs_df[assembly_identifier].notnull()
-            populated_OGs = HOGs_df.loc[filt, assembly_identifier]
+        for assembly_identifier in accession_list: #for each accession column
+            null_filt = HOGs_df[assembly_identifier].notnull()
+            populated_OGs = HOGs_df.loc[null_filt, assembly_identifier]
             populated_OGs = populated_OGs.to_dict()
             for HOG in populated_OGs:
                 HOG_proteins[assembly_identifier][HOG] = populated_OGs[HOG].split(',')
@@ -384,8 +330,8 @@ class DashOrthoParser():
     
     def get_HOG_annot_for_genome(self, HOG, assemb_accession):
         'return df with annotations for each protein in the given HOG for input genome'
-        
-        annot_df = pd.read_csv(f'./data/genome_annotations/{assemb_accession}_annotations.csv').set_index('HOGs')
+        path_to_data = os.path.join(self.path_to_data,f'genome_annotations/{assemb_accession}_annotations.csv' )
+        annot_df = pd.read_csv(path_to_data).set_index('HOGs')
         if HOG in annot_df.index:
             annots = annot_df.loc[HOG, :]
             
@@ -396,12 +342,19 @@ class DashOrthoParser():
             print(f'the HOG {HOG} does not exist in {self.accession_to_name[assemb_accession]}')
         return annots
 
+    def _get_common_gene_names(self, prot_dict, gene_dict):
+        Common_names = []
+        for prot in prot_dict:
+            gene_obj = gene_dict.get(prot_dict[prot].Parent)
+            if gene_obj:
+                Common_names.append(gene_obj.Name)
+            else:
+                Common_names.append(None)
+        return Common_names
 
-
-    def make_genome_annotation_df(self, assembly_accession):
-        files = os.listdir('./data/ncbi_dataset/data')
-
-        path_to_gff3 = os.path.join('./data/ncbi_dataset/data/',assembly_accession, 'genomic.gff')
+    def make_genome_annotation_df(self, assembly_accession, get_common_names=False):
+        path_to_gff3 = os.path.join(self.path_to_data, f'ncbi_dataset/data/{assembly_accession}/genomic.gff')
+        gene_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='gene')
         seq_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='CDS')
         df_dict = {
                 'IDs':[seq_dict[key].ID for key in seq_dict.keys()],
@@ -409,8 +362,10 @@ class DashOrthoParser():
                 'ends':[int(seq_dict[key].end) for key in seq_dict.keys()],
                 'strand': [seq_dict[key].strand for key in seq_dict.keys()],
                 'products':[seq_dict[key].product for key in seq_dict.keys()],
-                'Parents':[seq_dict[key].Parent for key in seq_dict.keys()]
+                'Parents':[seq_dict[key].Parent for key in seq_dict.keys()],
                 }
+        if get_common_names:
+            df_dict['Common_names'] = self._get_common_gene_names(seq_dict, gene_dict)
         df = pd.DataFrame(df_dict)
         df = df.set_index('IDs')
         #add orthogroup and HOG column to df
@@ -432,4 +387,60 @@ class DashOrthoParser():
         df['Orthogroups'] = ortho_list
         df['HOGs'] = HOG_list
         return df   
+    
+
+    def HOG_gene_dict(self, species_accession): 
+       #make df with orhtogroup and all genes in a given organism
+        df = pd.read_csv(self.N_HOG_path, sep = '\t', usecols = ["HOG", species_accession], low_memory=False)
+        df = df.astype(str)
+        df = df.set_index('HOG')
+        HOG_gene_dict = {}
+        for HOG in df.index:
+            HOG_gene_dict[HOG] = df.loc[HOG,species_accession].split(', ')
+        return HOG_gene_dict
+ 
+
+
+    def gene_HOG_dict(self, species_accession):
+        gene_HOG_dict = {}
+        HOG_gene_dict = self.HOG_gene_dict(species_accession)
+        for HOG, proteins in HOG_gene_dict.items():
+            proteins =  HOG_gene_dict[HOG]
+            if proteins[0] != 'nan':
+                for protein in proteins:
+                    gene_HOG_dict[protein.strip()] = HOG
+        return gene_HOG_dict
+
+
+       
+    def gene_to_orthogroup_dict(self, species_accession):
+        'return a dictionary of all genes/proteins (key) to orthogroups (value)'
+        g2o_dict = {}
+        d = self.orthogroup_gene_dict(species_accession)
+        for orthogroup, protein_lst in d.items(): 
+            if len(protein_lst) >1:
+                for protein in protein_lst:
+                    protein = protein.strip()
+                    g2o_dict[protein]=orthogroup
+            else:
+                g2o_dict[protein_lst[0].strip()]= orthogroup
+        return g2o_dict
+    
+ 
+
+    def get_HOG_protein_seqs(self, HOG, accession_length=15):
+        """Return df with proteinID as index, accession, HOG and protein sequence """
+        prot_names = self.all_prots_in_HOG(HOG)
+        d = {}
+        for prot_name in prot_names:
+            acc = prot_name[:accession_length][::-1].replace('_', '.',1)[::-1]
+            prot_id = prot_name[(accession_length+1):]
+            path_to_fasta = os.path.join(self.path_to_data, f'Proteomes/{acc}.faa')
+            seq = pfa.get_seq_dict(path_to_fasta).get(prot_id)
+            d[prot_name] = [acc, prot_id, HOG, seq]
+        df = pd.DataFrame.from_dict(d, orient='index')
+        df.columns = ['Accession', 'Prot_id', 'HOG', 'Protein_seq']
+        return df
+    
+    
     
