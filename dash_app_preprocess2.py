@@ -219,17 +219,13 @@ def make_genome_annotation_files(path_to_results):
 def copy_folders_from_orthoresults(path_to_results):
     """Copy data from orthofinder/results (.gitignored) folder into ./Data folder """
     import shutil
-    #src_ortho = os.path.join(path_to_results,'Orthogroups')
-    #shutil.copytree(src_ortho, './data/Orthogroups')
     src_HOGs = os.path.join(path_to_results,'Phylogenetic_Hierarchical_Orthogroups')
     shutil.copytree(src_HOGs, './data/Phylogenetic_Hierarchical_Orthogroups')
     src_gene_tree = os.path.join(path_to_results,'Resolved_Gene_Trees')
     shutil.copytree(src_gene_tree, './data/Resolved_Gene_Trees')
     src_spec_tree = os.path.join(path_to_results,'Species_Tree')
     shutil.copytree(src_spec_tree, './data/Species_Tree')
-    OrthogroupParser(path_to_results).N0_HOG_counts
-    src_N0_counts = os.path.join(path_to_results,'N0_HOG_counts.tsv')
-    shutil.copyfile(src_N0_counts, './Data/N0_HOG_counts.tsv')
+
         
     
 
