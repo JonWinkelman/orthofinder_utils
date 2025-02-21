@@ -12,6 +12,7 @@ from os.path import dirname
 import numpy as np
 from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
+from collections import Counter
 
 class DashOrthoParser():
     """
@@ -39,7 +40,6 @@ class DashOrthoParser():
                                                f'{self.HOG_node}_HOG_counts.tsv')
         self.N_HOG_path = os.path.join(self.path_to_data, f'Phylogenetic_Hierarchical_Orthogroups/{self.HOG_node}.tsv') 
         self.HOG_dir_path = os.path.join(self.path_to_data,'Phylogenetic_Hierarchical_Orthogroups')     
-        #self.N_HOG_counts = self.make_HOG_counts()#self.N_HOG_counts_check()
         self.HOGs = list(pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG'])['HOG'])
 
            
@@ -87,7 +87,7 @@ class DashOrthoParser():
         return OG_HOG_dict
       
     
-    def make_HOG_counts(self):
+    def prot_counts_in_all_HOGs(self):
         "Return a df containing, for each accession, the number of proteins in each HOG"
         
         tax_level = self.HOG_node
@@ -108,6 +108,27 @@ class DashOrthoParser():
         for df in lst_of_dfs[1:]:
             HOG_counts_df = pd.merge(HOG_counts_df, df, left_on='HOG', right_on='HOG', how  = 'outer')
         return HOG_counts_df
+
+    
+    def check_full_id_format(self, s):
+        return s.startswith("GC") and len(s) > 14 and s[13] == "_"
+    
+    def prot_counts_in_HOG(self, HOG):
+        """Return counts proteins in given HOG in each proteome
+        ***This assumes that protein name has NCBI assembly accession in beginning of ID
+        """ 
+        all_prots_in_HOG = self.all_prots_in_HOG(HOG)
+        #check that beginning of prot ID is a NCBI assembly accession
+        if not self.check_full_id_format(all_prots_in_HOG[0]):
+            raise ValueError(f'{all_prots_in_HOG[0]} does not appear to be formatted properly')
+                
+        accessions_present = [full_id[:15][::-1].replace('_', '.', 1)[::-1] for full_id in all_prots_in_HOG]
+        counts = Counter(accessions_present)
+    
+        for acc in self.accessions:
+            if acc not in accessions_present:
+                counts[acc] = 0
+        return counts
  
 
     def get_gene_counts(self):
@@ -285,7 +306,16 @@ class DashOrthoParser():
                 OG_percent_ingroup[orthogroup] = og_count_ingroup
         return list(OG_percent_ingroup.keys())
     
-    #Need to fix the path to orthogroups_df
+
+    def protein_to_HOG_df(self, accession):
+    "return the HOG that a protein belongs to within a genome"
+    
+    df = pd.read_csv(self.N_HOG_path, sep ='\t', usecols=['HOG',accession]).dropna()
+    df["protein_id"] = df[accession].str.split(", ")
+    df = df.explode("protein_id", ignore_index=True).drop(accession, axis=1).set_index('protein_id')
+    return df
+
+    
   
     def N_HOGs_proteins(self, tax_level=None, HOG_list=None, accession_list=None):
         """return nested dict {accession:{HOG:proteins}}
