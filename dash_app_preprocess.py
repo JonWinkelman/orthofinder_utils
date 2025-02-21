@@ -83,7 +83,7 @@ def accessions_from_proteome_dir(proteomes_dir):
 
 def accessions_from_orthofinder_files(path_to_results):
     return list(pd.read_csv(os.path.join(path_to_results, 
-                    'orthogroups/orthogroups.tsv'), sep = '\t').columns[1:])
+                    'Orthogroups/Orthogroups.tsv'), sep = '\t').columns[1:])
 
 
 def initial_check(path_to_results):
@@ -91,7 +91,7 @@ def initial_check(path_to_results):
     check that assemblies in orthogroups.tsv, proteome folder, and ncbi/data folder are equivalent
     """
     orth_assemblies = list(pd.read_csv(os.path.join(path_to_results, 
-                        'orthogroups/orthogroups.tsv'), sep = '\t').columns[1:]) 
+                        'Orthogroups/Orthogroups.tsv'), sep = '\t').columns[1:]) 
     proteome_assemblies = accessions_from_proteome_dir('./data/Proteomes')
     
     ncbidata_assemblies = [folder for folder in os.listdir('./data/ncbi_dataset/data')
@@ -105,7 +105,7 @@ def initial_check(path_to_results):
               f'assemblies present in ./data/ncbi_dataset/data/: {len(ncbidata_assemblies)}\n'
               f'assemblies present in ./data/Proteomes: {len(proteome_assemblies)}\n'
               f'assemblies present in\n'
-              f'{os.path.join(path_to_results, "orthogroups/orthogroups.tsv")}: {len(orth_assemblies)}'
+              f'{os.path.join(path_to_results, "Orthogroups/Orthogroups.tsv")}: {len(orth_assemblies)}'
               )
     else:
         print('all checks produce equivalent assembly identifiers')
