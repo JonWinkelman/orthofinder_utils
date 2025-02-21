@@ -111,10 +111,13 @@ class DashOrthoParser():
 
     
     def check_full_id_format(self, s):
+        "checks that s is in the format GC#_########_#_<prot_id>"
+        
         return s.startswith("GC") and len(s) > 14 and s[13] == "_"
     
     def prot_counts_in_HOG(self, HOG):
-        """Return counts proteins in given HOG in each proteome
+        """Return protein counts within a given HOG accross proteomes, fast but assumes NCBI accessions!!
+        
         ***This assumes that protein name has NCBI assembly accession in beginning of ID
         """ 
         all_prots_in_HOG = self.all_prots_in_HOG(HOG)
@@ -305,7 +308,6 @@ class DashOrthoParser():
             if og_count_ingroup >= threshold:
                 OG_percent_ingroup[orthogroup] = og_count_ingroup
         return list(OG_percent_ingroup.keys())
-    
 
     def protein_to_HOG_df(self, accession):
     "return the HOG that a protein belongs to within a genome"
