@@ -310,12 +310,12 @@ class DashOrthoParser():
         return list(OG_percent_ingroup.keys())
 
     def protein_to_HOG_df(self, accession):
-    "return the HOG that a protein belongs to within a genome"
+        "return the HOG that a protein belongs to within a genome"
     
-    df = pd.read_csv(self.N_HOG_path, sep ='\t', usecols=['HOG',accession]).dropna()
-    df["protein_id"] = df[accession].str.split(", ")
-    df = df.explode("protein_id", ignore_index=True).drop(accession, axis=1).set_index('protein_id')
-    return df
+        df = pd.read_csv(self.N_HOG_path, sep ='\t', usecols=['HOG',accession]).dropna()
+        df["protein_id"] = df[accession].str.split(", ")
+        df = df.explode("protein_id", ignore_index=True).drop(accession, axis=1).set_index('protein_id')
+        return df
 
     
   
