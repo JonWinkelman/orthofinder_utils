@@ -33,8 +33,6 @@ class DashOrthoParser():
         self.accession_to_name = self.accession_to_name()
         self.name_to_accession = self.name_to_accession()
         self.accessions = list(self.accession_to_name.keys())
-        self.gene_counts_per_orthogroup = self.get_gene_counts()  # a little slow 0.07 s
-        self.orthogroups = list(self.gene_counts_per_orthogroup.index)
         self.HOG_node = tax_level
         self.path_to_HOG_counts = os.path.join(self.path_to_data,
                                                f'{self.HOG_node}_HOG_counts.tsv')
@@ -222,36 +220,7 @@ class DashOrthoParser():
     
  
 
-    def get_og_saturation(self, group, copies):
-        'return % of genomes in group that contain each orthogroup'
-        '''
-        group (list):
-        return (dict): orthogroup:%present (string:float)
-        '''
-        gene_counts_df = pd.read_csv(self.path_to_gene_counts, sep='\t').set_index('Orthogroup')
-        df_grp = gene_counts_df[group]
-        filt =  (df_grp >= copies)
-        return ((filt.sum(axis=1)/len(group)*100)).to_dict()
-    
-        
-    def og_enrichment(self, ingroup, outgroup, copies):
-        'return % dif in presence of orthogroups in ingroup vs outgroup genomes'
-        '''
-        ingroup (list):
-        outgroup (list):
-        return (dict): orthogroup:%difference  (string:float)
-        '''
-        in_dict = self.get_og_saturation(ingroup, copies)
-        
-        if copies >= 2:
-            outgroup_copies = 2
-        else:
-            outgroup_copies = copies
-        out_dict = self.get_og_saturation(outgroup, outgroup_copies)
-        orthogroups = self.orthogroups
-        enrich_dict =  {orthgrp:(in_dict[orthgrp] - out_dict[orthgrp]) for orthgrp in orthogroups}
-        return enrich_dict
-    
+ 
 
     
     def HOG_enrichment(self, ingroup, outgroup, copies):
