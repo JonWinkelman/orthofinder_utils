@@ -173,21 +173,29 @@ class DashOrthoParser():
     
 
     
-    def HOG_protnames_in_genome(self, HOG,species_accession):
-        if isinstance(species_accession, str):
-            col_list = [species_accession]
+    def HOG_protnames_in_genome(self, HOG, species_accession):
+  
+        ser=pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG', species_accession], low_memory=False).set_index('HOG').loc[HOG,:]
+ 
+        if ser.shape[0] > 0: 
+            if type(ser.values[0]) == str:
+                return ser.values[0].split(', ')
+            else:
+                return []
+                
+        else:
+            return []
 
-        else:
-            raise Exception(f'species_accession needs to be a string, but you entered a {type(species_accession)}' )
-            
-        col_list.append('HOG')
-        df=pd.read_csv(self.N_HOG_path, sep='\t', usecols=col_list, low_memory=False)
-        ser = df.set_index('HOG').loc[HOG, species_accession]
-        if isinstance(ser, str): 
-            prot_list = ser.split(', ')
-        else:
-            prot_list = []
-        return prot_list
+    def HOG_genenames_in_genome(self, HOG, species_accession):
+        prot_list = self.HOG_protnames_in_genome(HOG, species_accession)
+        genes = []
+        if prot_list:
+            path_to_gff3 = os.path.join(self.path_to_data, f'ncbi_dataset/data/{species_accession}/genomic.gff')
+            prot2gene_dict = pgf.make_prot2gene_dict(path_to_gff3)
+            for prot in prot_list:
+                prot = 'cds-'+prot
+                genes.append(prot2gene_dict[prot].replace('gene-', ''))
+        return genes
     
     
     
@@ -281,7 +289,7 @@ class DashOrthoParser():
     def protein_to_HOG_df(self, accession):
         "return the HOG that a protein belongs to within a genome"
     
-        df = pd.read_csv(self.N_HOG_path, sep ='\t', usecols=['HOG',accession]).dropna()
+        df = pd.read_csv(self.N_HOG_path, sep ='\t', usecols=['HOG',accession],low_memory=False).dropna()
         df["protein_id"] = df[accession].str.split(", ")
         df = df.explode("protein_id", ignore_index=True).drop(accession, axis=1).set_index('protein_id')
         return df
@@ -402,7 +410,12 @@ class DashOrthoParser():
  
 
 
-    def gene_HOG_dict(self, species_accession):
+    def gene_HOG_dict(self, species_accession, feature_type='protein'):
+        """
+        Right now this *stupidly* returns protein to HOG by default. 
+        
+        feature_type (str): can be 'protein' or 'gene'
+        """
         gene_HOG_dict = {}
         HOG_gene_dict = self.HOG_gene_dict(species_accession)
         for HOG, proteins in HOG_gene_dict.items():
@@ -410,6 +423,13 @@ class DashOrthoParser():
             if proteins[0] != 'nan':
                 for protein in proteins:
                     gene_HOG_dict[protein.strip()] = HOG
+        if feature_type=='gene':
+            path_to_gff3 = os.path.join(self.path_to_data, f'ncbi_dataset/data/{species_accession}/genomic.gff')
+            prot2gene_dict = pgf.make_prot2gene_dict(path_to_gff3)
+            prot2gene_dict = {p.replace('cds-',''):g.replace('gene-','') for p,g in prot2gene_dict.items()}
+            gene2HOG_dict = {prot2gene_dict[prot]:HOG for prot, HOG in gene_HOG_dict.items()}
+            return gene2HOG_dict
+            
         return gene_HOG_dict
 
 
