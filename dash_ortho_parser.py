@@ -285,7 +285,7 @@ class DashOrthoParser():
         return Common_names
 
     def make_genome_annotation_df(self, assembly_accession, get_common_names=False):
-        path_to_gff3 = os.path.join(self.path_to_data, f'ncbi_dataset/data/{assembly_accession}/genomic.gff')
+        path_to_gff3 = os.path.join(self.path_to_data, f'gffs/{assembly_accession}.gff')
         gene_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='gene')
         seq_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='CDS')
         df_dict = {
