@@ -13,6 +13,7 @@ import numpy as np
 from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
 from collections import Counter
+from pathlib import Path
 
 class DashOrthoParser():
     """
@@ -41,6 +42,14 @@ class DashOrthoParser():
         self.HOGs = list(pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG'])['HOG'])
 
            
+    def gene_to_prot_d(self, accession):
+        gff_fp = Path(self.path_to_data) / f'gffs/{accession}.gff'
+        annot_df = pgf.make_simple_annot_df(gff_fp)
+        annot_df.index = annot_df.index.str.replace('gene-', '')
+        annot_df['protein_ID'] = annot_df['protein_ID'].str.replace('cds-', '')
+        return annot_df['protein_ID'].to_dict()
+    
+    
     def all_prots_in_HOG(self, HOG):
         'return a list of all proteins in a given HOG e.g. GCF_000332095_2_WP_008307711.1'
         HOG_df = pd.read_csv(self.N_HOG_path, sep = '\t', low_memory=False).set_index('HOG')
