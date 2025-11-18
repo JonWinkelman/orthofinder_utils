@@ -42,6 +42,7 @@ class DashOrthoParser():
         self.HOGs = list(pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG'])['HOG'])
 
            
+    
     def gene_to_prot_d(self, accession):
         gff_fp = Path(self.path_to_data) / f'gffs/{accession}.gff'
         annot_df = pgf.make_simple_annot_df(gff_fp)
@@ -371,7 +372,7 @@ class DashOrthoParser():
         return Common_names
 
     def make_genome_annotation_df(self, assembly_accession, get_common_names=False):
-        path_to_gff3 = os.path.join(self.path_to_data, f'ncbi_dataset/data/{assembly_accession}/genomic.gff')
+        path_to_gff3 = os.path.join(self.path_to_data, f'gffs/{assembly_accession}.gff')
         gene_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='gene')
         seq_dict = pgf.make_seq_object_dict(path_to_gff3, feature_type='CDS')
         df_dict = {
@@ -387,22 +388,14 @@ class DashOrthoParser():
         df = pd.DataFrame(df_dict)
         df = df.set_index('IDs')
         #add orthogroup and HOG column to df
-        gene_to_orthogroup_dict = self.gene_to_orthogroup_dict(assembly_accession)
         gene_to_HOG_dict = self.gene_HOG_dict(assembly_accession)
-        ortho_list = []
         HOG_list = []
         for protein in df.index:
-            if protein.startswith('cds-'):
-                protein = protein[4:]
-            if gene_to_orthogroup_dict.get(protein):
-                ortho_list.append(gene_to_orthogroup_dict[protein])
-            else:
-                ortho_list.append('no orthogroup')
+            protein =  protein.replace('cds-', '')
             if gene_to_HOG_dict.get(protein):
                 HOG_list.append(gene_to_HOG_dict.get(protein))
             else:
                 HOG_list.append('no HOG')
-        df['Orthogroups'] = ortho_list
         df['HOGs'] = HOG_list
         return df   
     
