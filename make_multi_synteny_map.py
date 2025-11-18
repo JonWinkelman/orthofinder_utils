@@ -1,30 +1,36 @@
-def make_multi_synteny_map(dop_obj, acc_feature_lst, num_genes = 20, x_spread=8000, height=5000):
-    """"""
-    fig = make_subplots(rows = len(acc_feature_lst), cols=1, shared_xaxes=False )
-    for i, acc_feature in  enumerate(acc_feature_lst, start=1):
-        acc, feature = acc_feature
-        fts = int(num_genes/2)
-        trimmed_df = get_df_for_feature(dop_obj, acc, feature=feature, fts=fts,)
-        tfig, x_spread = make_map(trimmed_df, feature_name=feature, colors=color_d,  x_spread=x_spread)
-        for t in tfig.data:
-            if t['text']:
-                HOG=t['text'].split('<br>')[-1].split('HOG: ')[-1]
-                if HOGs_to_highlight.get(HOG): 
-                    t.line.color = HOGs_to_highlight.get(HOG)
-            fig.add_trace(t, row=i, col=1)
-            fig.update_xaxes(range=x_spread, row=i, col=1)
+def flip_block(df):
+    """
+    Flip a genomic block (reverse coordinates and strand)
+    for a dataframe containing columns:
+    ['ID', 'starts', 'ends', 'strand', 'product', 'gene_ID', 'HOG']
+    """
+    
+    # Determine boundaries of the block
+    block_min = df[['starts', 'ends']].min().min()
+    block_max = df[['starts', 'ends']].max().max()
 
-    fig.update_layout(height=height, 
-                     paper_bgcolor='rgb(255,255,255)',
-                     plot_bgcolor='rgb(250,250,250)',
-                     margin={'t':0, 'b':0, 'l':0, 'r':0}, 
-                     showlegend = False,
-                     font={'size':5}
-                      
-    )
-    fig.update_xaxes(showticklabels=False)
-    fig.update_yaxes(showticklabels=False)
-    return fig
+    df = df.copy()  # to avoid modifying original dataframe
+
+    # Flip coordinates
+    df['new_starts'] = block_max - df['ends']
+    df['new_ends']   = block_max - df['starts']
+
+    # Flip strand
+    df['new_strand'] = df['strand'].map({'+': '-', '-': '+'}).fillna(df['strand'])
+
+    # Replace old columns with new ones
+    df['starts'] = df['new_starts']
+    df['ends']   = df['new_ends']
+    df['strand'] = df['new_strand']
+
+    # Drop temp columns
+    df = df.drop(columns=['new_starts', 'new_ends', 'new_strand'])
+
+    # Sort by the new starts coordinate
+    df = df.sort_values('starts')
+
+    return df
+
 
 
 def get_df_for_feature(dop_obj, assembly_accession, feature, fts=15):
@@ -76,12 +82,11 @@ def make_arrow_trace(protein, par, strand, prod, start, end, br, HOG, **kwargs):
     return trace
 
 
-def make_map(trimmed_df, feature_name = None, height = 150, yrange = [-1,1], colors=None, x_spread = None, bgcolor='rgb(250,250,250)'):
+def make_map(trimmed_df, feature_name = None, height = 150, yrange = [-1,1], x_spread = None, bgcolor='rgb(250,250,250)'):
     traces = []
     xrange = [0,0]
     #make traces for each feature
-    if not colors:
-        color_d = {earth_red:'rgb(161, 105, 40)'}
+
 
     for i,protein in enumerate(trimmed_df.index):
         #hoverinfo variables
