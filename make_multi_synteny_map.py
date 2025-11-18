@@ -1,3 +1,53 @@
+from pathlib import Path
+import pandas as pd 
+from jw_utils import parse_gff as pgf
+from jw_utils import plotly_preferences as pprefs
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+from tqdm import tqdm
+
+
+
+def make_multi_synteny_map(dop_obj, acc_feature_lst, num_genes = 20, x_spread=8000, height=5000, HOGs_to_highlight=None):
+    """
+    dop_obj (DashOrthoParser object):
+    acc_feature_lst (list of lists or tuples): internal list contains [[genome accessio, feature ID],[],,,]  feature ID is the protein that the figure will 
+    be centered around. Presumably they are all orthologs to each other. e.g. [['GCF_003024515.2', 'WP_107010098.1'],
+                     ['GCF_964211495.1', 'WP_368892597.1'],...]
+    num_genes (int): number of genes to process on each side of feature ID in which each fig is centered
+    x_spread (int): number of nts on each side of feature ID. 
+    height (int): Figure height
+    HOGs_to_highlight (dict): e.g.{HOG1:'rgb(100,100,100)', HOG2:'rgb(200,100,100)',...}
+    """
+    fig = make_subplots(rows = len(acc_feature_lst), cols=1, shared_xaxes=False )
+    for i, acc_feature in  tqdm(enumerate(acc_feature_lst, start=1)):
+        acc, feature = acc_feature
+        fts = int(num_genes/2)
+        trimmed_df = get_df_for_feature(dop_obj, acc, feature=feature, fts=fts,)
+        tfig, x_spread = make_map(trimmed_df, feature_name=feature,  x_spread=x_spread)
+        for t in tfig.data:
+            if t['text']:
+                HOG=t['text'].split('<br>')[-1].split('HOG: ')[-1]
+                if HOGs_to_highlight:
+                    if HOGs_to_highlight.get(HOG): 
+                        t.line.color = HOGs_to_highlight.get(HOG)
+            fig.add_trace(t, row=i, col=1)
+            fig.update_xaxes(range=x_spread, row=i, col=1)
+
+    fig.update_layout(height=height, 
+                     paper_bgcolor='rgb(255,255,255)',
+                     plot_bgcolor='rgb(250,250,250)',
+                     margin={'t':0, 'b':0, 'l':0, 'r':0}, 
+                     showlegend = False,
+                     font={'size':5}
+                      
+    )
+    fig.update_xaxes(showticklabels=False)
+    fig.update_yaxes(showticklabels=False)
+    return fig
+
+
+
 def flip_block(df):
     """
     Flip a genomic block (reverse coordinates and strand)
