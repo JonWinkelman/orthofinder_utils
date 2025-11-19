@@ -4,9 +4,86 @@ from jw_utils import parse_gff as pgf
 from jw_utils import plotly_preferences as pprefs
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+from jw_utils import jw_draw_tree as jtw
 from tqdm import tqdm
 
+def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spread =8000, height=5000, HOGs_to_highlight=None):
+    """
+    dop_obj (DashOrthoParser object):
+    acc_feature_lst (list of lists or tuples): internal list contains [[genome accessio, feature ID],[],,,]  feature ID is the protein that the figure will 
+    be centered around. Presumably they are all orthologs to each other. e.g. [['GCF_003024515.2', 'WP_107010098.1'],
+                     ['GCF_964211495.1', 'WP_368892597.1'],...]
+    num_genes (int): number of genes to process on each side of feature ID in which each fig is centered
+    x_spread (int): number of nts on each side of feature ID. 
+    height (int): Figure height
+    HOGs_to_highlight (dict): e.g.{HOG1:'rgb(100,100,100)', HOG2:'rgb(200,100,100)',...}
+    """
+    
 
+
+    fig = make_subplots(
+        rows =1, 
+        cols =2, 
+        shared_xaxes=False, 
+        shared_yaxes=True,
+        )
+    
+    tree_trace  = jtw.create_tree(tree, intern_node_label='name', ignore_branch_lengths=False)
+    ycoords = {cl.name:v for cl,v in jdt.get_y_coordinates(tree).items()}
+    fig.add_trace(tree_trace['data'][0], row=1, col=1)
+    fig.update_layout(tree_trace['layout'])
+    for i, acc_feature in  tqdm(enumerate(acc_feature_lst, start=1)):
+        
+        acc, feature = acc_feature
+        fts = int(num_genes/2)
+        leafname = f"{acc_feature[0].replace('.', '_')}_{feature}"
+        trimmed_df = get_df_for_feature(dop_obj, acc, feature=feature, fts=fts,)
+        trim = trimmed_df.loc[feature, 'starts'] - x_spread
+        trimmed_df['starts'] = trimmed_df['starts'] - trim
+        trimmed_df['ends'] = trimmed_df['ends'] - trim
+        tfig, xrange = make_map(trimmed_df, feature_name=feature,  x_spread=x_spread)
+        for t in tfig.data:
+            if t['text']:
+                HOG=t['text'].split('<br>')[-1].split('HOG: ')[-1]
+                if HOGs_to_highlight:
+                    if HOGs_to_highlight.get(HOG): 
+                        t.line.color = HOGs_to_highlight.get(HOG)
+            ycoord = ycoords[leafname]
+            q=t['y']
+            t['y'] = [y+ycoord for y in t['y']]
+            fig.add_trace(t, row=1, col=2)
+    fig.update_xaxes(range=xrange, row=1, col=2)
+    fig = blank_layout(fig)
+    return fig
+
+
+
+def blank_layout(fig):
+    fig.update_xaxes(
+        showgrid=False,    # hide gridlines
+        zeroline=False,    # hide x=0 line
+        showline=False,    # hide axis line
+        showticklabels=False,  # hide tick labels
+        ticks=""
+    )
+
+    fig.update_yaxes(
+        showgrid=False,
+        zeroline=False,
+        showline=False,
+        showticklabels=False,
+        ticks=""
+    )
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin={'t':0, 'b':0, 'l':0, 'r':0},
+        showlegend = False,
+    )
+
+    # fig.update_xaxes(showticklabels=False)
+    # fig.update_yaxes(showticklabels=False)
+    return fig
 
 def make_multi_synteny_map(dop_obj, acc_feature_lst, num_genes = 20, x_spread=8000, height=5000, HOGs_to_highlight=None):
     """
@@ -24,7 +101,7 @@ def make_multi_synteny_map(dop_obj, acc_feature_lst, num_genes = 20, x_spread=80
         acc, feature = acc_feature
         fts = int(num_genes/2)
         trimmed_df = get_df_for_feature(dop_obj, acc, feature=feature, fts=fts,)
-        tfig, x_spread = make_map(trimmed_df, feature_name=feature,  x_spread=x_spread)
+        tfig, xrange = make_map(trimmed_df, feature_name=feature,  x_spread=x_spread)
         for t in tfig.data:
             if t['text']:
                 HOG=t['text'].split('<br>')[-1].split('HOG: ')[-1]
@@ -32,19 +109,12 @@ def make_multi_synteny_map(dop_obj, acc_feature_lst, num_genes = 20, x_spread=80
                     if HOGs_to_highlight.get(HOG): 
                         t.line.color = HOGs_to_highlight.get(HOG)
             fig.add_trace(t, row=i, col=1)
-            fig.update_xaxes(range=x_spread, row=i, col=1)
+            fig.update_xaxes(range=xrange, row=i, col=1)
 
-    fig.update_layout(height=height, 
-                     paper_bgcolor='rgb(255,255,255)',
-                     plot_bgcolor='rgb(250,250,250)',
-                     margin={'t':0, 'b':0, 'l':0, 'r':0}, 
-                     showlegend = False,
-                     font={'size':5}
-                      
-    )
-    fig.update_xaxes(showticklabels=False)
-    fig.update_yaxes(showticklabels=False)
+    fig = blank_layout(fig)
+    fig.update_layout(height=height)
     return fig
+
 
 
 
