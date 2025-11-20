@@ -6,8 +6,66 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from jw_utils import jw_draw_tree as jtw
 from tqdm import tqdm
+from jw_utils import jw_draw_tree as jdt
 
-def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spread =8000, height=5000, HOGs_to_highlight=None):
+def genetreeID_2_orgname(tree, dop_obj):
+    """Return dict with organism name
+    
+    *assumes standard OrthoFInder leaf name format: 'GCF_964211495_1_WP_368892597.1'
+    """
+    tree_leaves = [cl.name for cl in tree.get_terminals()]
+    relable_d = {}
+    for leafname in tree_leaves: 
+        raw_acc = leafname[:15]
+        acc     = raw_acc[::-1].replace('_', '.', 1)[::-1]
+        orgname = dop_obj.accession_to_name[acc].split(' ')
+        orgname = '_'.join([f for f in orgname])
+        newname = f"{leafname[16:]}_{orgname}"
+        relable_d[leafname] = newname
+    return relable_d
+
+
+def add_annotations(fig, xcoord, ycoord, text, fontsize=3):
+    fig.add_annotation(
+        x=xcoord,
+        y=ycoord,
+        text=text,
+        showarrow=False,
+        xanchor="left",    # anchor text on the left
+        yanchor="middle",  # vertically centered
+        xref="x",
+        yref="y", 
+        font=dict(size=fontsize) 
+    )
+    return fig
+
+
+
+def get_connector_traces(tree): 
+    """Returns list of go.Scatter traces from each node to  edge of graph (length of longest leaf)"""
+
+    traces = []
+    term_ycoords = pd.Series({cl.name:v for cl,v in jdt.get_y_coordinates(tree).items() if cl.is_terminal()})
+    term_xcoords = pd.Series({cl.name:v for cl,v in jdt.get_x_coordinates(tree).items() if cl.is_terminal()})
+    xmax = term_xcoords.max()
+    for name, leaf_ycoord in term_ycoords.items(): 
+        connector_trace = go.Scatter(y=[leaf_ycoord, leaf_ycoord], 
+                                     x = [xmax, term_xcoords[name]], 
+                                     mode='lines', 
+                                     line={'dash':'dash',
+                                          'width':0.2, 
+                                          'color':'rgb(100,100,100)'}) 
+        traces.append(connector_trace)
+    return traces
+
+
+
+
+
+
+
+def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spread =8000, height=5000,
+                           HOGs_to_highlight=None, annotate_leaves=False, rename=False, **plot_opts):
     """
     dop_obj (DashOrthoParser object):
     acc_feature_lst (list of lists or tuples): internal list contains [[genome accessio, feature ID],[],,,]  feature ID is the protein that the figure will 
@@ -17,8 +75,32 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
     x_spread (int): number of nts on each side of feature ID. 
     height (int): Figure height
     HOGs_to_highlight (dict): e.g.{HOG1:'rgb(100,100,100)', HOG2:'rgb(200,100,100)',...}
+    annotate_leaves : bool
+            default False. If True adds permament leaf name at end of leaf node
+    **kwargs :
+        Additional keyword arguments passed to go.Scatter.
+        Supported kwargs:
+            intern_node_label : str
+                label to appear in hover data. "name", "confidence", ...fields set by newick file and Bio.Phylo
+            connector_lines : str
+                lines connectin leaf nodes to synteny plot
+            in_node_size : float
+                Internal node size on pylo tree.
+            nt_node_sizeame : float
+                Terminal node size on pylo tree.
+            opacity : float
+                Opacity of the trace.
+            hover_text : iterable of strings
+                text to appear when hovering over nodes on tree
+            cl_to_highlight : clade object or iterable of clade objects,
+                should be internal node
+            node_color_dict : dict
+                for coloring nodes, if node name not in dict will be given
+                defaulg color. e.g. {node_name:'rgb(x,x,x)'}
+            
+
+
     """
-    
 
 
     fig = make_subplots(
@@ -26,13 +108,26 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
         cols =2, 
         shared_xaxes=False, 
         shared_yaxes=True,
+        horizontal_spacing=0
         )
     
-    tree_trace  = jtw.create_tree(tree, intern_node_label='name', ignore_branch_lengths=False)
+ 
+    tree_trace  = jtw.create_tree(tree, **plot_opts)
     ycoords = {cl.name:v for cl,v in jdt.get_y_coordinates(tree).items()}
+    ## update tree x-range to remove whitespace
+    all_xcoords = pd.Series({cl.name:v for cl,v in tree.depths().items()})
+    tree_xspan=all_xcoords.max()-all_xcoords.min()
+    pad = tree_xspan*0.01
+    fig.update_xaxes(range=[all_xcoords.min()-pad, all_xcoords.max()+pad], row=1, col=1)  # subplot (1,1)
+    # connector traces
+    connector_traces = get_connector_traces(tree)
+    fig.add_traces(connector_traces, rows=[1 for r in connector_traces], cols=[1 for c in connector_traces])
+    # add permanant leaf names
+    if annotate_leaves:
+        pass
     fig.add_trace(tree_trace['data'][0], row=1, col=1)
     fig.update_layout(tree_trace['layout'])
-    for i, acc_feature in  tqdm(enumerate(acc_feature_lst, start=1)):
+    for acc_feature in  tqdm(acc_feature_lst):
         
         acc, feature = acc_feature
         fts = int(num_genes/2)
@@ -49,11 +144,15 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
                     if HOGs_to_highlight.get(HOG): 
                         t.line.color = HOGs_to_highlight.get(HOG)
             ycoord = ycoords[leafname]
-            q=t['y']
             t['y'] = [y+ycoord for y in t['y']]
             fig.add_trace(t, row=1, col=2)
     fig.update_xaxes(range=xrange, row=1, col=2)
     fig = blank_layout(fig)
+    if annotate_leaves:
+        relable_d = genetreeID_2_orgname(tree, dop_obj)
+        for cl in tree.get_terminals():
+            xcoord, ycoord = all_xcoords[cl.name], ycoords[cl.name]
+            add_annotations(fig, xcoord, ycoord, relable_d[cl.name] )
     return fig
 
 
