@@ -7,6 +7,28 @@ from plotly.subplots import make_subplots
 from jw_utils import jw_draw_tree as jtw
 from tqdm import tqdm
 from jw_utils import jw_draw_tree as jdt
+from Bio import Phylo
+
+def get_tree_from_HOG(dop_obj, HOG):
+    """Returns a resolved orthofinder gene tree pruned to the HOG """
+    OG = dop_obj.HOG_OG_dict()[HOG]
+    OG_tree_fp = Path(dop_obj.path_to_data) / f'Resolved_Gene_Trees/{OG}_tree.txt'
+    tree = Phylo.read(str(OG_tree_fp), format='newick')
+    prune_OG_tree_to_HOGtree(tree, dop_obj, HOG)
+    return tree
+
+
+
+def prune_OG_tree_to_HOGtree(OG_tree, dop_obj, HOG):
+
+    """Prune away leaves from tree (in place) that are in OG but not in corresponding HOG"""
+    OG = dop_obj.HOG_OG_dict()[HOG]
+    HOG_prots = dop_obj.all_prots_in_HOG(HOG)
+    OG_prots = dop_obj.all_prots_in_orthogroup(OG)
+    to_prune=set(OG_prots).difference(HOG_prots)
+    for leaf in to_prune: 
+        OG_tree.prune(leaf)
+
 
 def genetreeID_2_orgname(tree, dop_obj):
     """Return dict with organism name
@@ -65,7 +87,8 @@ def get_connector_traces(tree):
 
 
 def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spread =8000, height=5000,
-                           HOGs_to_highlight=None, annotate_leaves=False, rename=False, **plot_opts):
+                           HOGs_to_highlight=None, annotate_leaves=False, rename=False,
+                            feature_line_widths=0.1, **plot_opts):
     """
     dop_obj (DashOrthoParser object):
     acc_feature_lst (list of lists or tuples): internal list contains [[genome accessio, feature ID],[],,,]  feature ID is the protein that the figure will 
@@ -77,6 +100,9 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
     HOGs_to_highlight (dict): e.g.{HOG1:'rgb(100,100,100)', HOG2:'rgb(200,100,100)',...}
     annotate_leaves : bool
             default False. If True adds permament leaf name at end of leaf node
+
+    feature_line_widths : float
+            width of lines in synteny figure
     **kwargs :
         Additional keyword arguments passed to go.Scatter.
         Supported kwargs:
@@ -97,6 +123,7 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
             node_color_dict : dict
                 for coloring nodes, if node name not in dict will be given
                 defaulg color. e.g. {node_name:'rgb(x,x,x)'}
+
             
 
 
@@ -138,6 +165,8 @@ def make_tree_synteny_fig(dop_obj, tree, acc_feature_lst, num_genes = 20, x_spre
         trimmed_df['ends'] = trimmed_df['ends'] - trim
         tfig, xrange = make_map(trimmed_df, feature_name=feature,  x_spread=x_spread)
         for t in tfig.data:
+            if "line" in t:
+                t.line.width = feature_line_widths
             if t['text']:
                 HOG=t['text'].split('<br>')[-1].split('HOG: ')[-1]
                 if HOGs_to_highlight:

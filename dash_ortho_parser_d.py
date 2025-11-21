@@ -14,6 +14,8 @@ from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
 from collections import Counter
 from pathlib import Path
+from pathlib import Path
+from Bio import Phylo
 
 class DashOrthoParser():
     """
@@ -27,7 +29,6 @@ class DashOrthoParser():
     def __init__(self, path_to_data_folder, tax_level='N0', *args, **kwargs):
 
         
-        #self.path_to_data_folder = path_to_data_folder  # 
         self.path_to_data = path_to_data_folder
         self.path_to_orthogroups = os.path.join(self.path_to_data, 'Orthogroups/Orthogroups.tsv')                          
         self.path_to_gene_counts = os.path.join(self.path_to_data,'Orthogroups/Orthogroups.GeneCount.tsv')        
@@ -64,19 +65,30 @@ class DashOrthoParser():
                 HOG_prot_names.append(accession.replace('.','_') + '_' + prot.strip())
         return HOG_prot_names
                 
+    # def all_prots_in_orthogroup(self, orthogroup):
+    #     'return a list of all proteins in a given orthogroup e.g. GCF_000332095_2_WP_008307711.1'
+    #     orth_df = pd.read_csv(self.path_to_orthogroups, sep = '\t').set_index('Orthogroup')
+                
+    #     all_orth_prots = orth_df.loc[orthogroup,:]
+    #     all_orth_prots = all_orth_prots[~all_orth_prots.isnull()]
+    #     orth_prot_names = []
+    #     for accession in all_orth_prots.index:
+    #         prots = all_orth_prots[accession].split(', ')
+    #         for prot in prots:
+    #             orth_prot_names.append(accession.replace('.','_') + '_' + prot.strip())
+    #     return orth_prot_names
+    
+
+
     def all_prots_in_orthogroup(self, orthogroup):
         'return a list of all proteins in a given orthogroup e.g. GCF_000332095_2_WP_008307711.1'
-        orth_df = pd.read_csv(self.path_to_orthogroups, sep = '\t').set_index('Orthogroup')
-                
-        all_orth_prots = orth_df.loc[orthogroup,:]
-        all_orth_prots = all_orth_prots[~all_orth_prots.isnull()]
-        orth_prot_names = []
-        for accession in all_orth_prots.index:
-            prots = all_orth_prots[accession].split(', ')
-            for prot in prots:
-                orth_prot_names.append(accession.replace('.','_') + '_' + prot.strip())
-        return orth_prot_names
-    
+
+        OG_tree_fp = Path(self.path_to_data) / f"Resolved_Gene_Trees/{orthogroup}_tree.txt"
+        OG_tree = Phylo.read(OG_tree_fp, format='newick')  
+        return [cl.name for cl in OG_tree.get_terminals()]
+
+
+
     def HOG_OG_dict(self):
         df = pd.read_csv(self.N_HOG_path, sep = '\t', usecols=['HOG', 'OG']).set_index('HOG')
         HOG_ortho_dict = {}
