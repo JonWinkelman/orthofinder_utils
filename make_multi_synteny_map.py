@@ -9,6 +9,17 @@ from tqdm import tqdm
 from jw_utils import jw_draw_tree as jdt
 from Bio import Phylo
 
+def get_acc_feature_list(tree): 
+    ""
+    acc_feature_lst = []
+    leaf_names = [cl.name for cl in tree.get_terminals()]
+    for i, leaf in  enumerate(leaf_names, start=1):
+        feature = leaf[16:]
+        acc = leaf[:15][::-1].replace('_', '.', 1)[::-1]
+        acc_feature_lst.append([acc, feature])
+    return acc_feature_lst
+
+
 def get_tree_from_HOG(dop_obj, HOG):
     """Returns a resolved orthofinder gene tree pruned to the HOG """
     OG = dop_obj.HOG_OG_dict()[HOG]
