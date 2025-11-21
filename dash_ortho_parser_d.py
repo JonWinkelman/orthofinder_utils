@@ -65,18 +65,7 @@ class DashOrthoParser():
                 HOG_prot_names.append(accession.replace('.','_') + '_' + prot.strip())
         return HOG_prot_names
                 
-    # def all_prots_in_orthogroup(self, orthogroup):
-    #     'return a list of all proteins in a given orthogroup e.g. GCF_000332095_2_WP_008307711.1'
-    #     orth_df = pd.read_csv(self.path_to_orthogroups, sep = '\t').set_index('Orthogroup')
-                
-    #     all_orth_prots = orth_df.loc[orthogroup,:]
-    #     all_orth_prots = all_orth_prots[~all_orth_prots.isnull()]
-    #     orth_prot_names = []
-    #     for accession in all_orth_prots.index:
-    #         prots = all_orth_prots[accession].split(', ')
-    #         for prot in prots:
-    #             orth_prot_names.append(accession.replace('.','_') + '_' + prot.strip())
-    #     return orth_prot_names
+    
     
 
 
