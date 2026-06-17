@@ -13,6 +13,8 @@ import numpy as np
 from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
 from Bio import Phylo
+from pathlib import Path
+from tqdm import tqdm
 
 class DashOrthoParser():
     """
@@ -373,6 +375,104 @@ class DashOrthoParser():
         df = pd.DataFrame.from_dict(d, orient='index')
         df.columns = ['Accession', 'Prot_id', 'HOG', 'Protein_seq']
         return df
+
+
+    def get_HOGs_from_common_name(self, keyword):
+        """
+        Search GFF CDS product annotations for a keyword and return matching HOGs.
     
+        This method scans the `product` field of CDS annotations in GFF files under
+        `<self.path_to_data>/gffs/`. For each CDS whose product description contains
+        `keyword` case-insensitively, the corresponding protein ID is mapped to its
+        hierarchical orthogroup using the OrthoFinder N0 HOG table at `self.path_to_N0`.
+    
+        Parameters
+        ----------
+        keyword : str
+            Case-insensitive keyword to search for in the GFF CDS `product` field.
+            For example: "csrA", "flagellin", "ribosomal protein", "methyltransferase".
+    
+        Returns
+        -------
+        matching_hogs : list[str]
+            Unique HOG IDs associated with proteins whose product annotation matched
+            the keyword.
+    
+        hog_genome_counts : pandas.Series
+            Series indexed by HOG ID, where values are the number of genomes/species
+            in the N0 table that contain that HOG.
+    
+        protein_id_to_product : dict[str, str]
+            Dictionary mapping matched protein IDs to their product descriptions.
+    
+        Raises
+        ------
+        FileNotFoundError
+            If the expected GFF directory does not exist.
+        """
+        gff_directory = Path(self.path_to_data) / "gffs"
+        if not gff_directory.exists():
+            raise FileNotFoundError(f"The directory {gff_directory} does not exist.")
+        hog_table = pd.read_csv(
+            self.path_to_N0,
+            sep="\t",
+            index_col=0,
+            low_memory=False,
+        )
+        gff_paths = [
+            gff_path
+            for gff_path in gff_directory.glob("*.gff")
+            if gff_path.stem in hog_table.columns
+        ]
+        keyword_lower = keyword.lower()
+        matched_hogs = []
+        protein_id_to_product = {}
+        genome_to_matching_proteins = {gff_path.stem: [] for gff_path in gff_paths}
+        for gff_path in tqdm(gff_paths):
+            genome_id = gff_path.stem
+            protein_to_hog = (
+                hog_table[genome_id]
+                .dropna()
+                .str.split(", ")
+                .explode()
+                .reset_index()
+                .set_index(genome_id)["HOG"]
+                .to_dict()
+            )
+            with open(gff_path, "r") as handle:
+                for line in handle:
+                    if line.startswith("#"):
+                        continue
+                    fields = line.rstrip("\n").split("\t")
+                    if len(fields) < 9:
+                        continue
+                    attributes = fields[8]
+                    if not attributes.startswith("ID=cds-"):
+                        continue
+                    annotation_dict = {}
+                    for entry in attributes.split(";"):
+                        if "=" in entry:
+                            key, value = entry.split("=", 1)
+                            annotation_dict[key] = value
+                    product_description = annotation_dict.get("product")
+                    if not product_description:
+                        continue
+                    if keyword_lower not in product_description.lower():
+                        continue
+                    protein_id = annotation_dict["ID"].removeprefix("cds-")
+                    genome_to_matching_proteins[genome_id].append(protein_id)
+                    protein_id_to_product[protein_id] = product_description
+                    hog_id = protein_to_hog.get(protein_id)
+                    if hog_id:
+                        matched_hogs.append(hog_id)
+        hog_genome_counts = {}
+        for hog_id in set(matched_hogs):
+            genome_count = hog_table.loc[hog_id, :].dropna().shape[0]
+            if genome_count:
+                hog_genome_counts[hog_id] = genome_count
+        hog_genome_counts = pd.Series(hog_genome_counts).sort_values(ascending=False)
+        matching_hogs = sorted(set(matched_hogs))
+    
+        return matching_hogs, hog_genome_counts, protein_id_to_product
     
     
