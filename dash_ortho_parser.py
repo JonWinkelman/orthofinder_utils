@@ -15,6 +15,12 @@ from jw_utils import parse_fasta as pfa
 from Bio import Phylo
 from pathlib import Path 
 
+
+
+
+
+
+
 class DashOrthoParser():
     """
     a class to process orthofinder results for a dash application
@@ -385,6 +391,55 @@ class DashOrthoParser():
         df = pd.DataFrame.from_dict(d, orient='index')
         df.columns = ['Accession', 'Prot_id', 'HOG', 'Protein_seq']
         return df
+
+
+    
+
+
+    def make_individual_Resolved_trees(self):
+        concat_tree_file = Path(self.path_to_data) / "Resolved_Gene_Trees/Resolved_Gene_Trees.txt"
+        if not concat_tree_file.exists():
+            print(f"concat tree file {concat_tree_file} does not exists.")
+        else:
+            o2t_d = parse_orthogroup_trees(concat_tree_file)
+            for og, nwk_str in o2t_d.items(): 
+                with open(concat_tree_file.parent / f"{og}_tree.txt", "w") as f:
+                    f.write(nwk_str + "\n")
     
     
     
+def parse_orthogroup_trees(tree_file):
+    """
+    Parse a file containing one Newick tree per orthogroup.
+
+    Expected format
+    ---------------
+    Each tree starts with an orthogroup ID followed by a colon:
+
+        OG0000000: (A:0.1,B:0.2);
+        OG0000001: (C:0.3,D:0.4);
+
+    Parameters
+    ----------
+    tree_file : str or pathlib.Path
+        Path to the file containing orthogroup-labeled Newick trees.
+
+    Returns
+    -------
+    dict
+        Dictionary mapping orthogroup IDs to Newick tree strings.
+    """
+    tree_file = Path(tree_file)
+    orthogroup_to_tree = {}
+
+    with open(tree_file) as handle:
+        for line in handle:
+            line = line.strip()
+
+            if not line:
+                continue
+
+            orthogroup_id, newick_tree = line.split(":", 1)
+            orthogroup_to_tree[orthogroup_id] = newick_tree.strip()
+
+    return orthogroup_to_tree
