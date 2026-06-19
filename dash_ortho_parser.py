@@ -13,8 +13,7 @@ import numpy as np
 from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
 from Bio import Phylo
-from pathlib import Path
-from tqdm import tqdm
+from pathlib import Path 
 
 class DashOrthoParser():
     """
@@ -28,11 +27,10 @@ class DashOrthoParser():
     def __init__(self, path_to_data_folder, tax_level='N0', *args, **kwargs):
 
         
-        self.path_to_data = path_to_data_folder      
-        self.accession_to_name = self.accession_to_name()
-        self.name_to_accession = self.name_to_accession()
-        self.accessions = list(self.accession_to_name.keys())
-        #self.gene_counts_per_orthogroup = self.get_gene_counts()  # a little slow 0.07 s
+        self.path_to_data = path_to_data_folder  
+        self.accessions = self.get_accessions_from_species_tree()
+        self.accession_to_name = self._accession_to_name()
+        self.name_to_accession = self._name_to_accession()
         self.path_to_N0 = os.path.join(self.path_to_data, 'Phylogenetic_Hierarchical_Orthogroups/N0.tsv')
         self.orthogroups = list(set(pd.read_csv(self.path_to_N0, sep='\t', usecols=[1])['OG']))
         self.HOG_node = tax_level
@@ -45,6 +43,13 @@ class DashOrthoParser():
         self.HOGs = list(pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG'])['HOG'])
 
            
+    def get_accessions_from_species_tree(self):
+        """"""
+        path_to_data = Path(self.path_to_data)
+        path_to_species_tree = path_to_data / 'Species_Tree/SpeciesTree_rooted.txt'
+        tree = Phylo.read(str(path_to_species_tree), format='newick')
+        return [cl.name for cl in tree.get_terminals()]
+        
     def all_prots_in_HOG(self, HOG):
         'return a list of all protein IDs in a given HOG e.g. GCF_000332095_2_WP_008307711.1'
         HOG_df = pd.read_csv(self.N_HOG_path, sep = '\t', low_memory=False).set_index('HOG')
@@ -106,21 +111,26 @@ class DashOrthoParser():
         return HOG_counts_df
  
     
-    def accession_to_name(self):
+    def _accession_to_name(self):
         'return a dictionary with accessions as keys and names as values'
-        path_to_json = os.path.join(self.path_to_data, 'summary_data/AssemblyAccession_to_SpeciesName.json')             
-        with open(path_to_json) as f:
-            return json.load(f)
-    
+        from jw_utils import ncbi_utils as nu 
+        path_to_summary_data = Path(self.path_to_data) / 'summary_data/summaries.json'
+        path_to_AssemblyAccession_to_SpeciesName = path_to_summary_data.parent / 'AssemblyAccession_to_SpeciesName.json'
+        if not path_to_summary_data.exists(): 
+            path_to_summary_data.parent.mkdir(exist_ok=True)
+            nu.download_assembly_summaries_from_list(self.accessions, str(path_to_summary_data))
+            summmary_df = nu.make_summary_df(str(path_to_summary_data))
+        else:
+            summmary_df = nu.make_summary_df(str(path_to_summary_data))
+            
+        if not path_to_AssemblyAccession_to_SpeciesName.exists():
+            summmary_df['organism_name'].to_json(str(path_to_AssemblyAccession_to_SpeciesName))
+        return summmary_df['organism_name'].to_dict()
+            
 
     
-    def name_to_accession(self):
-    
-        name2assembly = {}
-        for key in self.accession_to_name.keys():
-            name2assembly[self.accession_to_name[key]] = key 
-    
-        return name2assembly    
+    def _name_to_accession(self):
+        return {v:k for k,v in self.accession_to_name.items()}  
     
  
 
@@ -375,104 +385,6 @@ class DashOrthoParser():
         df = pd.DataFrame.from_dict(d, orient='index')
         df.columns = ['Accession', 'Prot_id', 'HOG', 'Protein_seq']
         return df
-
-
-    def get_HOGs_from_common_name(self, keyword):
-        """
-        Search GFF CDS product annotations for a keyword and return matching HOGs.
     
-        This method scans the `product` field of CDS annotations in GFF files under
-        `<self.path_to_data>/gffs/`. For each CDS whose product description contains
-        `keyword` case-insensitively, the corresponding protein ID is mapped to its
-        hierarchical orthogroup using the OrthoFinder N0 HOG table at `self.path_to_N0`.
-    
-        Parameters
-        ----------
-        keyword : str
-            Case-insensitive keyword to search for in the GFF CDS `product` field.
-            For example: "csrA", "flagellin", "ribosomal protein", "methyltransferase".
-    
-        Returns
-        -------
-        matching_hogs : list[str]
-            Unique HOG IDs associated with proteins whose product annotation matched
-            the keyword.
-    
-        hog_genome_counts : pandas.Series
-            Series indexed by HOG ID, where values are the number of genomes/species
-            in the N0 table that contain that HOG.
-    
-        protein_id_to_product : dict[str, str]
-            Dictionary mapping matched protein IDs to their product descriptions.
-    
-        Raises
-        ------
-        FileNotFoundError
-            If the expected GFF directory does not exist.
-        """
-        gff_directory = Path(self.path_to_data) / "gffs"
-        if not gff_directory.exists():
-            raise FileNotFoundError(f"The directory {gff_directory} does not exist.")
-        hog_table = pd.read_csv(
-            self.path_to_N0,
-            sep="\t",
-            index_col=0,
-            low_memory=False,
-        )
-        gff_paths = [
-            gff_path
-            for gff_path in gff_directory.glob("*.gff")
-            if gff_path.stem in hog_table.columns
-        ]
-        keyword_lower = keyword.lower()
-        matched_hogs = []
-        protein_id_to_product = {}
-        genome_to_matching_proteins = {gff_path.stem: [] for gff_path in gff_paths}
-        for gff_path in tqdm(gff_paths):
-            genome_id = gff_path.stem
-            protein_to_hog = (
-                hog_table[genome_id]
-                .dropna()
-                .str.split(", ")
-                .explode()
-                .reset_index()
-                .set_index(genome_id)["HOG"]
-                .to_dict()
-            )
-            with open(gff_path, "r") as handle:
-                for line in handle:
-                    if line.startswith("#"):
-                        continue
-                    fields = line.rstrip("\n").split("\t")
-                    if len(fields) < 9:
-                        continue
-                    attributes = fields[8]
-                    if not attributes.startswith("ID=cds-"):
-                        continue
-                    annotation_dict = {}
-                    for entry in attributes.split(";"):
-                        if "=" in entry:
-                            key, value = entry.split("=", 1)
-                            annotation_dict[key] = value
-                    product_description = annotation_dict.get("product")
-                    if not product_description:
-                        continue
-                    if keyword_lower not in product_description.lower():
-                        continue
-                    protein_id = annotation_dict["ID"].removeprefix("cds-")
-                    genome_to_matching_proteins[genome_id].append(protein_id)
-                    protein_id_to_product[protein_id] = product_description
-                    hog_id = protein_to_hog.get(protein_id)
-                    if hog_id:
-                        matched_hogs.append(hog_id)
-        hog_genome_counts = {}
-        for hog_id in set(matched_hogs):
-            genome_count = hog_table.loc[hog_id, :].dropna().shape[0]
-            if genome_count:
-                hog_genome_counts[hog_id] = genome_count
-        hog_genome_counts = pd.Series(hog_genome_counts).sort_values(ascending=False)
-        matching_hogs = sorted(set(matched_hogs))
-    
-        return matching_hogs, hog_genome_counts, protein_id_to_product
     
     
