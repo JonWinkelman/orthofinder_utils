@@ -263,6 +263,11 @@ def flip_block(df):
     for a dataframe containing columns:
     ['ID', 'starts', 'ends', 'strand', 'product', 'gene_ID', 'HOG']
     """
+    if 'start' in df.columns:
+        col_rename=True
+        df = df.rename(columns = {'start':'starts', 'end':'ends'})
+    else:
+        col_rename=False
     
     # Determine boundaries of the block
     block_min = df[['starts', 'ends']].min().min()
@@ -287,6 +292,8 @@ def flip_block(df):
 
     # Sort by the new starts coordinate
     df = df.sort_values('starts')
+    if col_rename:
+        df = df.rename(columns = {'starts':'start', 'ends':'end'})
 
     return df
 
