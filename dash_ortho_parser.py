@@ -38,6 +38,7 @@ class DashOrthoParser():
         self.accession_to_name = self._accession_to_name()
         self.name_to_accession = self._name_to_accession()
         self.path_to_N0 = os.path.join(self.path_to_data, 'Phylogenetic_Hierarchical_Orthogroups/N0.tsv')
+        self.make_N0_df()
         self.orthogroups = list(set(pd.read_csv(self.path_to_N0, sep='\t', usecols=[1])['OG']))
         self.HOG_node = tax_level
         self.path_to_HOG_counts = os.path.join(
@@ -47,6 +48,23 @@ class DashOrthoParser():
         self.N_HOG_path = os.path.join(self.path_to_data, f'Phylogenetic_Hierarchical_Orthogroups/{self.HOG_node}.tsv') 
         self.HOG_dir_path = os.path.join(self.path_to_data,'Phylogenetic_Hierarchical_Orthogroups')     
         self.HOGs = list(pd.read_csv(self.N_HOG_path, sep='\t', usecols=['HOG'])['HOG'])
+       
+
+           
+    
+    def make_N0_df(self):
+        if Path(self.path_to_N0).exists():
+            #raise FileExistsError(f'{self.path_to_N0} already_exists!')
+            return 
+        else:
+            OG_df = pd.read_csv(Path(self.path_to_data) / 'Orthogroups/Orthogroups.tsv', low_memory=False, sep='\t')
+            OG_df['HOG'] = OG_df['Orthogroup'].str.replace('OG', 'N0.HOG')
+            OG_df = OG_df.set_index('HOG').rename(columns={'Orthogroup':'OG'})
+            N0_df = OG_df.iloc[:,:1]
+            N0_df['Gene Tree Parent Clade'] =  [None for _ in range(OG_df.shape[0])]
+            N0_df = pd.concat([N0_df, OG_df.iloc[:,1:] ], axis=1)
+            print(f'writing {self.path_to_N0}')
+            N0_df.to_csv(self.path_to_N0, sep='\t')
 
            
     def get_accessions_from_species_tree(self):
