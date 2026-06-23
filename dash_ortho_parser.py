@@ -14,7 +14,7 @@ from jw_utils import parse_gff as pgf
 from jw_utils import parse_fasta as pfa
 from Bio import Phylo
 from pathlib import Path 
-
+from tqdm import tqdm
 
 
 
@@ -67,6 +67,49 @@ class DashOrthoParser():
             N0_df.to_csv(self.path_to_N0, sep='\t')
 
            
+    
+            
+    def get_HOGs_from_common_name(self, keyword = 'CsrA'): 
+        """"""
+        path_to_HOG_tsv = self.path_to_N0.replace('N0', self.HOG_node)
+        HOG_df= pd.read_csv(path_to_HOG_tsv, sep='\t', low_memory=False, index_col=0)
+        gff_dir  = Path(self.path_to_data) / 'gffs'
+        gff_fps = [fp for fp in gff_dir.glob('*.gff')]
+        keyword = keyword.lower()
+        protein_HOG_d = {gff_fp.stem:[] for gff_fp in gff_fps}
+        genome_HOG_cnts = {}
+        HOG_cnts        = {H:0 for H in HOG_df.index}
+        gff_fps = [fp for fp in gff_fps if fp.stem in HOG_df.columns]
+        for gff_fp in tqdm(gff_fps): 
+            acc = gff_fp.stem
+            genome_df = HOG_df[acc]
+            genome_df = genome_df.dropna()
+            if genome_df.shape[0] > 0:
+                prot_2_HOG_ID = genome_df.dropna().str.split(', ').explode().to_frame().reset_index().set_index(acc)['HOG'].to_dict()
+                with open(gff_fp, 'r') as f: 
+                    for line in f:
+                        if not line.startswith('#'):  
+                            annt_line = line.split('\t')[-1]
+                            if annt_line.startswith('ID=cds-'):
+                                annt_line_lst = annt_line.split(';')
+                                annt_line_d = {}
+                                for kv in annt_line_lst:
+                                    annt_line_d[kv.split('=')[0]] = kv.split('=')[1]
+                                s = annt_line_d.get('product')
+                                if s:
+                                    s=s.lower()
+                                    prot_id = annt_line_d['ID'].replace('cds-', '')
+                                    if keyword in s:
+                                        HOG = prot_2_HOG_ID.get(prot_id)
+                                        if HOG:
+                                            protein_HOG_d[acc].append(HOG)
+                                            HOG_cnts[HOG] +=1
+                genome_HOG_cnts[acc] = len(protein_HOG_d[acc])
+        HOG_cnts = pd.Series(HOG_cnts).sort_values(ascending=False)
+        genome_HOG_cnts = pd.Series(genome_HOG_cnts).sort_values(ascending=False)
+        return HOG_cnts, genome_HOG_cnts        
+            
+    
     def get_accessions_from_species_tree(self):
         """"""
         path_to_data = Path(self.path_to_data)
